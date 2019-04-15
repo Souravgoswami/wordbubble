@@ -21,6 +21,7 @@ While quitting, you will be asked. The quit window runs in a separate thread, an
 
 
 You can see your performance, and score histories from the stat window. Again, the stat window also runs in a separate thread!
+
 ![Screenshots](https://github.com/Souravgoswami/wordbubble/blob/master/ScreenShots/c.png)
 
 **Bugs**: This game is tested on GNU/Linux. If you are facing any issues on Mac or Windows (mainly with the path separator for Windows), please let me know!
