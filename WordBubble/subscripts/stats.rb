@@ -1,32 +1,37 @@
 #!/usr/bin/env ruby
 # Written by Sourav Goswami <souravgoswami@protonmail.com>. Thanks to Ruby2D community!
 # GNU General Public License v3.0
-require_relative 'x'
+require('ruby2d')
 
 @path = File.dirname(__FILE__)
 Font = File.join(@path, 'fonts', 'Merienda-Regular.ttf')
 
+module Ruby2D
+	def contain?(obj) contains?(obj.x, obj.y) end
+	def decrease_opacity(step = 0.05, threshold = 0) self.opacity -= step if opacity > threshold end
+	def increase_opacity(step = 0.05, threshold = 1) self.opacity += step if opacity < threshold end
+end
+
 define_method(:main) do
 	$width, $height, $fps = 640, 480, 50
 	set title: 'Chalkboard Challenge Statistics', width: $width, height: $height, fps_cap: $fps, background: 'white', resizable: true
-	Image.load(File.join(@path, 'images', 'bg_stat_window.png'), width: $width, height: $height, opacity: 0.3)
+	Image.new(File.join(@path, 'images', 'bg_stat_window.png'), width: $width, height: $height, opacity: 0.3)
 
-	scores = IO.readlines(File.join(@path, 'data', 'scorelist.data')).map { |data| [data].pack('h*').to_i }
-	read_score = scores.last(5)
-	last_score = read_score[-2] ? read_score[-2] : read_score[-1]
-	score = read_score[-1]
+	scores = File.exist?(File.join(@path, 'data', 'data')) ? IO.readlines(File.join(@path, 'data', 'data')).map { |x| [x.strip].pack('h*').to_i } : [0]
 
-	read_score, score = 'Not enough data', 0 if read_score.empty?
+	read_score, score = scores.last(5), scores[-1]
+	read_score = score = 0 if read_score.empty?
+	very_low, low, avg, good = 0...3000, 3000...6000, 6000...9000, 9000...12000
 
 	you_in = case score
-		when 0...3000 then 0
-		when 3000...6000 then 1
-		when 6000...9000 then 2
-		when (9000...12000).to_a then 3
+		when very_low then 0
+		when low then 1
+		when avg then 2
+		when good then 3
 		else 4
 	end
 
-	game_details = <<~EOF.split("\n")
+	game_details = <<~EOF.strip
 		WordBubble is a word game intended to focus on your
 		English word recalling capability.
 
@@ -38,19 +43,27 @@ define_method(:main) do
 		Scores: The graph on the right side shows the
 		details.
 
-		-------------------------------------------
-
-		Your Recent Score: #{score}.
-		Your Past Score: #{last_score}.
-		Your Best Score: #{scores.max}.
-		Your last 5 Scores:
-				#{read_score.join(', ')}.
-
-		-------------------------------------------
+		Benefit: Playing this game may increase
+		your word recalling capability.
+		-----------------------------------
+		Your Current Score: #{score.to_i}.
+		Your Past Score: #{read_score[-2] ? read_score[-2].to_i : read_score[-1].to_i}.
+		Your Best Score: #{scores.max.to_i}.
 	EOF
 
-	game_details_texts, game_details_touched = Array.new(game_details.size) { |i| Text.new(game_details[i], font: Font, x: 5, y: i * 20, size: 15, color: [1, i / 25.0, 1 - i / 10.0, 1] ) }, false
-	triangles, touched_tri = 20.step(260, 60).map { |i| Triangle.new(x1: $height - i + 120, y1: 0 + i, x2: $height - i + 170, y2: 350, x3: $height - i + 70, y3: 350, color: [1, 1 - i / 260.0, i / 260.0, 1]) }.reverse, nil
+	game_details << if scores.length > 5
+		"\nYour last 5 Scores:\n\t" << read_score.join(', ')
+	elsif scores.length > 1
+		"\nYour last #{scores.length} Scores:\n\t" << read_score.join(', ')
+	else
+		''
+	end << "\n-----------------------------------"
+
+	game_details = game_details.split("\n")
+
+	gd = game_details.size.to_f
+	game_details_texts, game_details_touched = Array.new(game_details.size) { |i| Text.new(game_details[i], font: Font, x: 5, y: i * 20, size: 15, color: [1 - i / gd, 0.5 - i / (gd * 2.0), i / gd, 1] ) }, false
+	triangles, touched_tri = 20.step(260, 60).map { |i| Triangle.new(x1: $height - i + 120, y1: 0 + i, x2: $height - i + 170, y2: 350, x3: $height - i + 70, y3: 350, color: [1, i / 600.0, 1 - i / 300.0, 1]) }.reverse, nil
 	particles = Array.new(100) do
 		sample, size = triangles.sample, [1, 2].sample
 		Square.new(x: rand(sample.x3..sample.x2), y: sample.y2 - size , size: size, color: '#FFFFFF')
@@ -68,17 +81,17 @@ define_method(:main) do
 	you.y = triangles[you_in].y1 / 2 + triangles[you_in].y2 / 2 - you.height / 2
 
 	details_raw = <<~EOF.each_line.map { |el| ' ' * 6 + el }
-					VERY LOW: (< 100) You must improve.
- 					LOW: (100 - 350) You have to improve.
- 					AVERAGE: (350 - 650) Normal performance.
- 					GOOD: (650 - 1000) Wow! That's quick!
- 					EXCELLENT: (> 1000) You are godlike!
+					VERY LOW: (< #{very_low.last}) You must improve.
+ 					LOW: (#{very_low.last} - #{low.last - 1}) Still not good.
+ 					AVERAGE: (#{low.last} - #{avg.last - 1}) Normal performance.
+ 					GOOD: (#{avg.last} - #{good.last - 1}) Wow! You are amazing!
+ 					EXCELLENT: (> #{good.last - 1}) You are godlike!
 	EOF
 
 	a_line = Line.new color: '#000000', x1: triangles[0].x3, x2: triangles[-1].x2, y1: triangles[0].y2 + 10, y2: triangles[-1].y2 + 10
-	details_info = Array.new(details_raw.size) { |i| Text.new(details_raw[i], font: Font, x: a_line.x1 - 20, y: a_line.y1 + 5 + i * 18, size: 11, color: [1, i / 5.0, 1 - i / 5.0, 1]) }
+	details_info = Array.new(details_raw.size) { |i| Text.new(details_raw[i], font: Font, x: a_line.x1 - 20, y: a_line.y1 + 5 + i * 18, size: 11, color: [1, i / 10.0, i / 5.0, 1]) }
 
-	on :key_down do |k| exit 0 if %w(escape p q space).include?(k.key) end
+	on(:key_down) { |k| close if %w(escape p q space).include?(k.key) }
 
 	on :mouse_move do |e|
 		triangles.each do |el|
@@ -113,11 +126,11 @@ define_method(:main) do
 			end
 		end
 
-		game_details_touched ? game_details_texts.each { |el| el.equal?(game_details_touched) ? el.decrease_opacity(0.05, 0.4) : el.increase_opacity } : game_details_texts.each(&:increase_opacity)
+		game_details_touched ? game_details_texts.each { |el| el.equal?(game_details_touched) ? el.increase_opacity : el.decrease_opacity(0.05, 0.4)  } : game_details_texts.each(&:increase_opacity)
 
 		if touched_tri
 			triangles.each_with_index do |el, index|
-				unless el.equal?(touched_tri)
+				if el.equal?(touched_tri)
 					el.increase_opacity
 					details_info[index].increase_opacity
 					grade_texts[index].increase_opacity
@@ -128,7 +141,7 @@ define_method(:main) do
 				end
 			end
 		else
-			triangles.increase_opacity
+			triangles.each(&:increase_opacity)
 			details_info.each(&:increase_opacity)
 			grade_texts.each(&:increase_opacity)
 		end
@@ -139,6 +152,11 @@ define_method(:main) do
 	end
 end
 
-main
-
-Window.show
+begin
+	main
+	Window.show
+rescue SystemExit, Interrupt
+	puts
+rescue Exception => e
+	Kernel.warn("Uh oh, Caught an Exception:\n#{' ' * 4}#{e}\n#{'-' * (e.to_s.length + 4)}\nError Details:\n#{' ' * 4}#{e.backtrace.join("\n" + ' ' * 4)}\n")
+end
